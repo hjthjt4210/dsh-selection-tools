@@ -2,6 +2,12 @@
 
 面向 DSH web 客户端的对话页选中文字工具。
 
+## 演示
+
+![dsh-selection-tools 演示](assets/demo.gif)
+
+[查看高清演示视频](https://github.com/hjthjt4210/dsh-selection-tools/releases/download/v0.3.0/dsh-selection-tools-demo.mp4)
+
 在对话页面用鼠标或键盘选中任意文字时，选区旁会出现一个迷你工具条，提供两个动作：
 
 | 动作 | 行为 |
