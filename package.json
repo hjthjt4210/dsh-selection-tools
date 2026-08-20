@@ -1,6 +1,6 @@
 {
   "name": "dsh-selection-tools",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Select conversation text and attach it as native composer annotations or copy it to the clipboard.",
   "repository": {
     "type": "git",
