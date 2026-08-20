@@ -1,0 +1,49 @@
+{
+  "name": "dsh-selection-tools",
+  "version": "0.3.0",
+  "description": "Select conversation text and attach it as native composer annotations or copy it to the clipboard.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hjthjt4210/dsh-selection-tools.git"
+  },
+  "homepage": "https://github.com/hjthjt4210/dsh-selection-tools#readme",
+  "bugs": {
+    "url": "https://github.com/hjthjt4210/dsh-selection-tools/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots",
+        "@deepseek-ai/dsh-client-ui-input-trigger"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "deepseek-harness",
+    "plugin",
+    "selection",
+    "clipboard",
+    "composer",
+    "web"
+  ],
+  "license": "MIT"
+}

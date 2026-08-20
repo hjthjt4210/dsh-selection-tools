@@ -1,0 +1,6 @@
+# dsh-selection-tools — 对话页选中文字工具。
+# Registers a selection toolbar in shell.overlay. The host entry is a no-op;
+# browser behavior is provided by the package's separate client bundle.
+- insert:
+    - id: selection-tools
+      name: dsh-selection-tools
