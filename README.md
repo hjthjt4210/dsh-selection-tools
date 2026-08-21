@@ -22,6 +22,7 @@
 - 悬停胶囊可查看每条引用的完整内容。
 - 点击胶囊右侧 `×` 可删除全部注释。
 - 发送消息时，注释会作为 `<selection_annotations>` 上下文提交。
+- 已发送的消息会把 `<selection_annotations>` 协议正文替换为「N 条注释」胶囊；悬停或键盘聚焦胶囊可查看每条引用，消息中的普通正文仍会保留。
 
 ## 安装
 
@@ -49,6 +50,7 @@ Copy-Item -Recurse -Force .\dsh-selection-tools "$env:USERPROFILE\.dsh\profiles\
   塞进可见草稿。
 - **发送序列化**通过 `inputTriggers` 注册专用 codec。DSH 提交草稿时把芯片展开为
   `<selection_annotations>` 上下文；删除芯片会同时取消这些引用。
+- **已发送消息渲染**通过客户端 DOM 观察器识别协议片段，只替换可见协议文本，发送给模型的原始上下文不变。
 - **复制**优先使用 Clipboard API，并为不支持的环境提供本地复制回退。
 - 样式只用 `--dsw-*` 主题令牌，自动跟随深浅色模式。
 
