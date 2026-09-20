@@ -163,6 +163,7 @@ class DocFragment extends Base { constructor() { super(11); } }
 const doc = new (class extends Base {
 	constructor() {
 		super(9);
+		this.listeners = {};
 		this.documentElement = new Element("html");
 		this.head = new Element("head");
 		this.body = new Element("body");
@@ -172,6 +173,11 @@ const doc = new (class extends Base {
 	createElement(tag) { return new Element(tag); }
 	createTextNode(data) { return new Text(data); }
 	createDocumentFragment() { return new DocFragment(); }
+	querySelector() { return null; }
+	querySelectorAll() { return []; }
+	addEventListener(type, fn) { (this.listeners[type] ||= new Set()).add(fn); }
+	removeEventListener(type, fn) { this.listeners[type]?.delete(fn); }
+	fire(type, event) { for (const fn of this.listeners[type] || []) fn(event); }
 	createTreeWalker(root) {
 		const texts = textNodesUnder(root);
 		let at = 0;
@@ -190,9 +196,23 @@ class MutationObserverStub {
 	emit(records) { if (!this.disconnected) this.cb(records, this); }
 }
 
+/** A non-editable text node the fake selection can point at. */
+const quotedHost = el("div", ["选中的原文 <tag> 结尾"]);
 globalThis.window = {
 	__ModuleLoader__: { load(def) { loaded = def; } },
-	getSelection: () => null,
+	innerWidth: 1200,
+	innerHeight: 800,
+	getSelection: () => ({
+		rangeCount: 1,
+		anchorNode: quotedHost.childNodes[0],
+		focusNode: quotedHost.childNodes[0],
+		getRangeAt: () => ({
+			collapsed: false,
+			toString: () => "选中的原文 <tag>",
+			getBoundingClientRect: () => ({ left: 20, top: 20, width: 80, height: 12 }),
+		}),
+		removeAllRanges() {},
+	}),
 };
 globalThis.document = doc;
 globalThis.Node = { ELEMENT_NODE: 1, TEXT_NODE: 3, DOCUMENT_FRAGMENT_NODE: 11 };
@@ -210,8 +230,34 @@ function resetBody() {
 	textReads = 0;
 }
 
-const react = { useState: (init) => [init, () => {}], useEffect: () => {}, useCallback: (f) => f, useRef: () => ({ current: null }) };
+const react = {
+	useState: (init) => {
+		const at = hookAt++;
+		if (hooks[at] === undefined) hooks[at] = { value: typeof init === "function" ? init() : init };
+		const slot = hooks[at];
+		return [slot.value, (next) => { slot.value = typeof next === "function" ? next(slot.value) : next; }];
+	},
+	useEffect: (fn) => { const off = fn(); if (typeof off === "function") effectOffs.push(off); },
+	useCallback: (f) => f,
+	useRef: (init) => { const at = hookAt++; if (hooks[at] === undefined) hooks[at] = { current: init }; return hooks[at]; },
+};
 const jsxRuntime = { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" };
+let hooks = [];
+let hookAt = 0;
+const effectOffs = [];
+function renderComponent(Component, props) {
+	hookAt = 0;
+	return Component(props);
+}
+/** Depth-first search for a rendered element whose props match. */
+function findRendered(node, predicate, out = []) {
+	if (Array.isArray(node)) node.forEach((child) => findRendered(child, predicate, out));
+	else if (node && typeof node === "object") {
+		if (predicate(node)) out.push(node);
+		findRendered(node.props?.children, predicate, out);
+	}
+	return out;
+}
 
 await import(clientUrl.href);
 const mod = loaded.factory((name) => (name === "react" ? react : name === "react/jsx-runtime" ? jsxRuntime : (() => { throw new Error("unexpected require " + name); })()));
@@ -219,10 +265,13 @@ const mod = loaded.factory((name) => (name === "react" ? react : name === "react
 const sources = [];
 const disposers = [];
 const slotComponents = {};
+/** Swapped per test: the conversation service the plugin resolves shells through. */
+let conversationShell;
 const ctx = {
 	get(name) {
-		if (name !== "inputTriggers") throw new Error("unexpected ctx.get(" + name + ")");
-		return { registerSource: (s) => sources.push(s) };
+		if (name === "inputTriggers") return { registerSource: (s) => sources.push(s) };
+		if (name === "conversation") return { input: { shell: () => conversationShell } };
+		throw new Error("unexpected ctx.get(" + name + ")");
 	},
 	slots: {
 		inject: (name, fn) => fn(),
@@ -438,6 +487,49 @@ const suffix = (/\[title\$="([^"]*)"\]/.exec(css) || [])[1];
 check("the component emits a rule hiding the host chip", css.includes("display: none"), css.slice(0, 90));
 check("the pill shows a count label", label !== "", JSON.stringify(rendered));
 check("CSS suffix and visible label are the same wording", label === `2${suffix}`, `label=${JSON.stringify(label)} suffix=${JSON.stringify(suffix)}`);
+
+console.log("\n[12] quoting twice keeps updating the same chip");
+hooks = [];
+const inserts = [];
+let shellSnap = { phase: "plain", draft: "", draftRev: 1, occurrences: [] };
+conversationShell = {
+	get snapshot() { return shellSnap; },
+	setDraft() {},
+	notify() {},
+	insertReference(ref, span) {
+		inserts.push({ ref, span });
+		shellSnap = {
+			phase: "plain",
+			draft: ref.clipboardText,
+			draftRev: shellSnap.draftRev + 1,
+			occurrences: [{ source: ref.source, ref: ref.ref, offset: 0, length: ref.clipboardText.length }],
+		};
+		return true;
+	},
+};
+const Toolbar = slotComponents["shell.overlay"];
+const toolbarProps = { useSessions: (sel) => sel({ current: "s1" }) };
+const quoteOnce = () => {
+	renderComponent(Toolbar, toolbarProps);
+	doc.fire("mouseup", {});
+	runFrames();
+	const tree = renderComponent(Toolbar, toolbarProps);
+	const button = findRendered(tree, (n) => n.props?.title === "引用到当前输入框")[0];
+	if (!button) return false;
+	button.props.onClick();
+	return true;
+};
+check("the toolbar offers a quote button", quoteOnce());
+check("a second quote also goes through", quoteOnce());
+check("insertReference was called twice", inserts.length === 2, "calls=" + inserts.length);
+const second = inserts[1];
+check("the second insert replaces the chip, not a clipboard-width span",
+	second && second.span.end === second.span.start + 1,
+	JSON.stringify(second && second.span));
+check("the second insert carries both annotations",
+	JSON.parse(decodeURIComponent(second.ref.ref)).length === 2,
+	second && second.ref.ref);
+check("the label counted up", second.ref.label === "2" + " 条注释", second && second.ref.label);
 
 console.log(`\n${fail ? "FAILED" : "PASSED"}  ${pass} checks passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
