@@ -501,6 +501,8 @@ check("the pill renders from the shell, with no props", label !== "", JSON.strin
 check("the pill subscribes to session changes", sessionSubscribers.length > 0);
 check("the pill subscribes to draft changes", shellSubscribers.length > 0);
 check("the component emits a rule hiding the host chip", css.includes("display: none"), css.slice(0, 90));
+check("the rule targets this runtime's real chip markup, not the dead data-decoration attribute",
+	css.includes(`[data-composer-card] span[title="${label}"]`), css.slice(0, 200));
 check("CSS suffix and visible label are the same wording", label === `2${suffix}`, `label=${JSON.stringify(label)} suffix=${JSON.stringify(suffix)}`);
 const clearButton = findRendered(pillTree, (n) => n.props?.title === "删除全部注释")[0];
 check("the pill offers a clear button", !!clearButton);
