@@ -1,6 +1,8 @@
 // Smoke test for the sent-annotation renderer and wire codec: a minimal DOM stub
 // lets lib/client.js's real functions run in Node. Run with `npm test`. It exercises
 // escaping, the deepest-owner render rule, idempotence and per-mutation scan cost.
+import { existsSync, readFileSync } from "node:fs";
+
 const clientUrl = new URL("../lib/client.js", import.meta.url);
 const PILL_ATTR = "data-dsh-selection-tools-sent";
 
@@ -530,12 +532,14 @@ conversationShell = {
 };
 const Toolbar = slotComponents["shell.overlay"];
 const toolbarProps = { useSessions: (sel) => sel({ current: "s1" }) };
-const quoteOnce = () => {
+const showToolbar = () => {
 	renderComponent(Toolbar, toolbarProps);
 	doc.fire("mouseup", {});
 	runFrames();
-	const tree = renderComponent(Toolbar, toolbarProps);
-	const button = findRendered(tree, (n) => n.props?.title === "引用到当前输入框")[0];
+	return renderComponent(Toolbar, toolbarProps);
+};
+const quoteOnce = () => {
+	const button = findRendered(showToolbar(), (n) => n.props?.title === "引用到当前输入框")[0];
 	if (!button) return false;
 	button.props.onClick();
 	return true;
@@ -551,6 +555,36 @@ check("the second insert carries both annotations",
 	JSON.parse(decodeURIComponent(second.ref.ref)).length === 2,
 	second && second.ref.ref);
 check("the label counted up", second.ref.label === "2" + " 条注释", second && second.ref.label);
+
+console.log("\n[13] styling follows the host design system");
+const clientSource = readFileSync(clientUrl, "utf8");
+const themeFile = [process.env.DSH_THEME_FILE, "E:/DSH Desktop/resources/app/node_modules/@deepseek-ai/dsh-client-ui-theme/lib/client.js"]
+	.filter(Boolean).find((p) => existsSync(p));
+if (themeFile) {
+	const theme = readFileSync(themeFile, "utf8");
+	const defined = new Set([...theme.matchAll(/(--dsw-[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+	const used = [...new Set([...clientSource.matchAll(/--dsw-[a-z0-9-]+/g)].map((m) => m[0]))];
+	const missing = used.filter((t) => !defined.has(t));
+	check(`every --dsw-* token used is defined by the host (${used.length} checked)`, missing.length === 0, missing.join(", "));
+} else {
+	console.log("  skip   host theme file not found; set DSH_THEME_FILE to enable the token check");
+}
+const sentCss = (/const SENT_ANNOTATION_CSS = `([\s\S]*?)`;/.exec(clientSource) || [])[1] || "";
+check("the sent chip copies the host chip geometry (22px tall, radius 6)",
+	sentCss.includes("height: 22px") && sentCss.includes("border-radius: 6px"), sentCss.slice(0, 150));
+check("the sent chip copies the host chip colors",
+	sentCss.includes("var(--dsw-alias-interactive-bg-hover)") && sentCss.includes("var(--dsw-alias-state-business-primary)"));
+check("floating layers use the host elevation token",
+	(clientSource.match(/--dsw-elevation-prominent/g) || []).length >= 2,
+	"count=" + (clientSource.match(/--dsw-elevation-prominent/g) || []).length);
+check("no hand-written black shadows left", !/rgba\(\s*0,\s*0,\s*0/.test(clientSource));
+const toolbarTree = showToolbar();
+const quoteStyle = findRendered(toolbarTree, (n) => n.props?.title === "引用到当前输入框")[0].props.style;
+const copyStyle = findRendered(toolbarTree, (n) => n.props?.title === "复制选中文字")[0].props.style;
+check("引用 is the host primary button", quoteStyle.background === "var(--dsw-alias-button-primary-fill)", JSON.stringify(quoteStyle));
+check("复制 is a ghost button", copyStyle.background === "transparent", JSON.stringify(copyStyle));
+check("toolbar buttons use the host small-button capsule geometry",
+	quoteStyle.borderRadius === 14 && quoteStyle.height === 28, JSON.stringify(quoteStyle));
 
 console.log(`\n${fail ? "FAILED" : "PASSED"}  ${pass} checks passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
