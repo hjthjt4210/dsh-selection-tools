@@ -12,6 +12,9 @@
   },
   "type": "module",
   "main": "lib/index.js",
+  "scripts": {
+    "test": "node --check lib/index.js && node --check lib/client.js && node test/render.smoke.mjs"
+  },
   "files": [
     "lib",
     "cordis.patch.yml",

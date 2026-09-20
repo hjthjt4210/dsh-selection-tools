@@ -36,6 +36,10 @@ Copy-Item -Recurse -Force .\dsh-selection-tools "$env:USERPROFILE\.dsh\profiles\
 然后在 `%USERPROFILE%\.dsh\profiles\web\package.json` 的
 `dsh.profile.bundles` 数组中加入 `"dsh-selection-tools"`，最后重启 DSH。
 
+DSH Desktop 用同一个 `package.json` 结构，把上面两处的 `web` 换成 `desktop` 即可
+（`%USERPROFILE%\.dsh\profiles\desktop\`）。只需要往 `bundles` 里加，不要写进
+`dependencies`——那个数组里的条目会走 pnpm 解析。
+
 本插件的 `lib/index.js` 是无操作的宿主入口,浏览器功能位于 `lib/client.js`。
 这种双入口结构可避免 DSH 启动时在 Node.js 环境执行浏览器代码。
 
@@ -49,8 +53,10 @@ Copy-Item -Recurse -Force .\dsh-selection-tools "$env:USERPROFILE\.dsh\profiles\
 - **引用数据**通过官方 conversation 服务的 `shell.insertReference()` 写入，正文不会直接
   塞进可见草稿。
 - **发送序列化**通过 `inputTriggers` 注册专用 codec。DSH 提交草稿时把芯片展开为
-  `<selection_annotations>` 上下文；删除芯片会同时取消这些引用。
+  `<selection_annotations>` 上下文；删除芯片会同时取消这些引用。选中文字按 XML 实体转义
+  （`&` `<` `>`）后再写入信封，回读时还原，因此引用一段含标签的文本不会提前闭合协议。
 - **已发送消息渲染**通过客户端 DOM 观察器识别协议片段，只替换可见协议文本，发送给模型的原始上下文不变。
+  观察器只处理变更所在的子树，不做全文档扫描。
 - **复制**优先使用 Clipboard API，并为不支持的环境提供本地复制回退。
 - 样式只用 `--dsw-*` 主题令牌，自动跟随深浅色模式。
 
@@ -60,9 +66,15 @@ Copy-Item -Recurse -Force .\dsh-selection-tools "$env:USERPROFILE\.dsh\profiles\
 （React 18 + `react/jsx-runtime`）。
 
 ```bash
+npm test
+# 等价于：
 node --check lib/index.js
 node --check lib/client.js
+node test/render.smoke.mjs
 ```
+
+`test/render.smoke.mjs` 自带一个最小 DOM 桩，直接跑 `lib/client.js` 里的真实函数，
+覆盖转义往返、胶囊渲染和每次变动的扫描开销，不需要装任何依赖。
 
 ## License
 
