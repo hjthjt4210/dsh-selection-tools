@@ -267,10 +267,12 @@ const disposers = [];
 const slotComponents = {};
 /** Swapped per test: the conversation service the plugin resolves shells through. */
 let conversationShell;
+const sessionSubscribers = [];
 const ctx = {
 	get(name) {
 		if (name === "inputTriggers") return { registerSource: (s) => sources.push(s) };
 		if (name === "conversation") return { input: { shell: () => conversationShell } };
+		if (name === "sessions") return { list: { getSnapshot: () => ({ current: "s1" }), subscribe: (fn) => { sessionSubscribers.push(fn); return () => {}; } } };
 		throw new Error("unexpected ctx.get(" + name + ")");
 	},
 	slots: {
@@ -474,19 +476,36 @@ observer.emit([{ type: "characterData", target: real.childNodes[0].childNodes[0]
 runFrames();
 check("no reads after dispose", textReads === 0, "reads " + textReads);
 
-console.log("\n[11] the chip-hiding CSS and the visible label share one wording");
+console.log("\n[11] the pill sources its own state, because the slot passes no props");
+hooks = [];
+const draftSnap = {
+	phase: "plain",
+	draft: "[2 条注释]",
+	draftRev: 3,
+	occurrences: [{ source: "selection-annotations", ref: encodeURIComponent(JSON.stringify(["甲", "乙"])), offset: 0, length: 9 }],
+};
+let shellSubscribers = [];
+const setDraftCalls = [];
+conversationShell = {
+	snapshot: draftSnap,
+	state: { getSnapshot: () => draftSnap, subscribe: (fn) => { shellSubscribers.push(fn); return () => {}; } },
+	setDraft: (text) => { setDraftCalls.push(text); },
+};
 const Pill = slotComponents["conversation.input.left"];
-const pillTree = Pill({
-	input: { draft: "草稿", occurrences: [{ source: "selection-annotations", ref: encodeURIComponent(JSON.stringify(["甲", "乙"])), offset: 2 }] },
-	inputActions: { setDraft: () => {} },
-});
+const pillTree = renderComponent(Pill, {});
 const rendered = renderedStrings(pillTree);
 const css = rendered.find((s) => s.includes("data-decoration")) || "";
 const label = rendered.find((s) => /^\d+\s*\S*注释$/.test(s)) || "";
 const suffix = (/\[title\$="([^"]*)"\]/.exec(css) || [])[1];
+check("the pill renders from the shell, with no props", label !== "", JSON.stringify(rendered));
+check("the pill subscribes to session changes", sessionSubscribers.length > 0);
+check("the pill subscribes to draft changes", shellSubscribers.length > 0);
 check("the component emits a rule hiding the host chip", css.includes("display: none"), css.slice(0, 90));
-check("the pill shows a count label", label !== "", JSON.stringify(rendered));
 check("CSS suffix and visible label are the same wording", label === `2${suffix}`, `label=${JSON.stringify(label)} suffix=${JSON.stringify(suffix)}`);
+const clearButton = findRendered(pillTree, (n) => n.props?.title === "删除全部注释")[0];
+check("the pill offers a clear button", !!clearButton);
+if (clearButton) clearButton.props.onClick({ preventDefault: () => {}, stopPropagation: () => {} });
+check("clearing removes the whole chip from the draft", setDraftCalls.length === 1 && setDraftCalls[0] === "", JSON.stringify(setDraftCalls));
 
 console.log("\n[12] quoting twice keeps updating the same chip");
 hooks = [];
